@@ -19,8 +19,8 @@
 const char* DEFAULT_OUTPUT = "out.png";
 
 /* operating modes of the program */
-enum Mode { EMBED, DECODE };
-enum ArgKey { IMAGE, EMBED_FILE, OUTPUT_FILE };
+enum Mode { EMBED, DECODE, SUBTRACT };
+enum ArgKey { IMAGE, EMBED_FILE, OUTPUT_FILE, SUBTRACT_FILE };
 
 typedef uint8_t  BYTE;    /* 8 bit unsigned integer */
 typedef uint64_t LONG;    /* 64 bit unsigned integer */
@@ -115,6 +115,25 @@ retrieve ( cimg_library::CImg<CHANNEL> *img, size_t bytes, int &pix,
 
     /* return the retrieved data */
     return c;  
+}
+
+void
+subtract_images ( cimg_library::CImg<CHANNEL> &img,  
+        cimg_library::CImg<CHANNEL> &sub,
+        cimg_library::CImg<CHANNEL> &result ) {
+   
+    unsigned int max = img.max(); 
+    for(int x=0; x<img.width(); x++) {
+        for(int y=0; y<img.height(); y++) {
+            for( int s=0; s<img.spectrum(); s++ ) {
+                CHANNEL *p1 = img.data( x, y, 0, s );
+                CHANNEL *p2 = sub.data( x, y, 0, s );
+                CHANNEL *p3 = result.data( x, y, 0, s );
+                
+                *p3 = (((double)abs(*p1 - *p2))/CHANNEL_BIT_MASK)*max;
+            }
+        }
+    }
 }
 
 void
@@ -252,6 +271,23 @@ handle_args ( int argc, char *argv[] ) {
                         args[OUTPUT_FILE] = argv[i];
                     }             
                     break;
+                case 's':
+                    /* the s flag sets up the program to run in subtract mode. 
+                     * It also expects that the user has passed an input file 
+                     * to be subtracted. If no argument follows the -s flag 
+                     * then the user has neglected to specify the file they 
+                     * wish to subtract and the program's operation 
+                     * terminates */
+                    if(i+1 >= argc) {
+                        std::ostringstream oss;
+                        oss << argv[i] << " expects an argument";
+                        die(oss.str());
+                    }
+                    
+                    i++;
+                    g_mode = SUBTRACT;
+                    args[SUBTRACT_FILE] = argv[i];
+                    break;
                 default:
                     /* user tried to use a flag that the program does not
                      * support. Issue a warning and proceed */
@@ -277,6 +313,7 @@ handle_args ( int argc, char *argv[] ) {
     }
     return args;
 }
+
 
 void
 run_embed_mode( ArgMap args ) {
@@ -361,6 +398,63 @@ run_decode_mode( ArgMap args ) {
     retrieve_file_from_image( &img, output_name );
 }
 
+void
+run_subtract_mode( ArgMap args ) {
+    char *image_name;
+    char *subtract_name;
+    char *output_name;
+
+    ArgMap::iterator it = args.find(IMAGE);
+    if(it == args.end()) {
+        usage();
+    } 
+
+    image_name = it->second;
+
+    it = args.find(SUBTRACT_FILE);
+    if(it == args.end()) {
+        usage();
+    } 
+
+    subtract_name = it->second;
+
+    it = args.find(OUTPUT_FILE);
+    if(it == args.end()) {
+        output_name = const_cast<char*> (DEFAULT_OUTPUT);
+    } else {
+        output_name = it->second;
+    }
+
+    cimg_library::CImg<CHANNEL> img;
+    try {
+        img.load(image_name);
+    } catch ( cimg_library::CImgIOException e ) {
+        std::ostringstream oss;
+        oss << "unable to open " << image_name;
+        die(oss.str());
+    }
+
+    cimg_library::CImg<CHANNEL> sub;
+    try {
+        sub.load(subtract_name);
+    } catch ( cimg_library::CImgIOException e ) {
+        std::ostringstream oss;
+        oss << "unable to open " << subtract_name;
+        die(oss.str());
+    }
+
+    if( img.width() != sub.width() || img.height() != sub.height() || 
+            img.spectrum() != sub.spectrum() || img.depth() != sub.depth() ) {
+        die("Subtraction requires two images of the same size");
+    }
+
+    cimg_library::CImg<CHANNEL> result( img.width(), img.height(), img.depth(), 
+            img.spectrum(), 0);
+
+    subtract_images( img, sub, result );
+
+    result.save(output_name);
+}
 
 int
 main ( int argc, char *argv[] )
@@ -373,6 +467,9 @@ main ( int argc, char *argv[] )
             break;
         case DECODE:
             run_decode_mode(args); 
+            break;
+        case SUBTRACT:
+            run_subtract_mode(args);
             break;
     }
 
