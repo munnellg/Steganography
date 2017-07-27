@@ -34,7 +34,12 @@ Mode g_mode = DECODE;
 
 void
 usage() {
-    std::cout<< "usage: steg [-e FILE | -o FILE] IMAGE" << std::endl;
+    std::cout<< 
+        "usage: steg [ -e FILE | -o FILE | -s IMAGE2 ] IMAGE" << std::endl
+        << std::endl 
+        << "-e embed FILE in IMAGE" << std::endl
+        << "-o output result to FILE" << std::endl
+        << "-s subtract IMAGE2 from IMAGE" << std::endl;
     exit(-1);
 }
 
@@ -109,8 +114,7 @@ retrieve ( cimg_library::CImg<CHANNEL> *img, size_t bytes, int &pix,
         
         /* update pix and channel to be the indexes of the next pixel/channel
          * combination of interest */
-        next( img, pix, channel );
-        
+        next( img, pix, channel );        
     } 
 
     /* return the retrieved data */
@@ -130,6 +134,8 @@ subtract_images ( cimg_library::CImg<CHANNEL> &img,
                 CHANNEL *p2 = sub.data( x, y, 0, s );
                 CHANNEL *p3 = result.data( x, y, 0, s );
                 
+                /* Normalize the difference based on the largest pixel value
+                 * in the image */
                 *p3 = (((double)abs(*p1 - *p2))/CHANNEL_BIT_MASK)*max;
             }
         }
